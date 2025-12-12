@@ -14,8 +14,8 @@ spec:
     spec:
       containers:
       - name: todo-app
-        image: docker.io/library/todo-app:v1  # Полное имя образа
-        imagePullPolicy: IfNotPresent
+        image: YOUR_DOCKER_USERNAME/todo-app-kubernetes:latest  # ← ИЗМЕНИТЕ НА СВОЕ
+        imagePullPolicy: Always  # Всегда тянуть свежий образ
         ports:
         - containerPort: 3000
         env:

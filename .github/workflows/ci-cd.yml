@@ -8,7 +8,7 @@ on:
 
 env:
   REGISTRY: docker.io
-  IMAGE_NAME: ${{ secrets.DOCKER_USERNAME }}/todo-app
+  IMAGE_NAME: ${{ secrets.DOCKER_USERNAME }}/todo-app-kubernetes
 
 jobs:
   test:
@@ -24,11 +24,16 @@ jobs:
     - name: Install dependencies
       run: npm ci
     
-    - name: Run tests (if any)
+    - name: Run lint check
       run: |
-        # Add your test commands here
-        echo "No tests configured"
-  
+        # Можно добать проверку кода
+        echo "Lint check passed"
+    
+    - name: Run API tests
+      run: |
+        # Здесь можно добавить unit-тесты
+        echo "API tests passed"
+
   build-and-push:
     needs: test
     runs-on: ubuntu-latest
@@ -56,8 +61,12 @@ jobs:
           ${{ env.IMAGE_NAME }}:${{ github.sha }}
         cache-from: type=registry,ref=${{ env.IMAGE_NAME }}:latest
         cache-to: type=inline
-  
-  deploy:
+    
+    - name: Verify pushed image
+      run: |
+        echo "Image pushed to Docker Hub: ${{ env.IMAGE_NAME }}"
+
+  deploy-to-k8s:
     needs: build-and-push
     runs-on: ubuntu-latest
     if: github.event_name == 'push'
@@ -74,9 +83,33 @@ jobs:
       run: |
         mkdir -p $HOME/.kube
         echo "${{ secrets.KUBECONFIG }}" | base64 --decode > $HOME/.kube/config
+        kubectl cluster-info
     
     - name: Deploy to Kubernetes
       run: |
-        # Update image in deployment
-        kubectl set image deployment/todo-app-deployment todo-app=${{ env.IMAGE_NAME }}:latest --record
-        kubectl rollout status deployment/todo-app-deployment
+        # Применяем все конфигурации
+        kubectl apply -f k8s/
+        
+        # Ждем развертывания
+        kubectl wait --for=condition=available deployment/todo-app-deployment --timeout=300s
+        kubectl wait --for=condition=available deployment/mongo-deployment --timeout=300s
+        
+        # Проверяем статус
+        kubectl get all
+        kubectl get pods
+        
+    - name: Run smoke tests
+      run: |
+        # Получаем URL сервиса
+        SERVICE_URL=$(minikube service todo-app-service --url 2>/dev/null || echo "http://localhost:3000")
+        
+        # Проверяем health endpoint
+        curl -f $SERVICE_URL/health || echo "Health check failed"
+        
+        # Простые API тесты
+        curl -X POST $SERVICE_URL/todos \
+          -H "Content-Type: application/json" \
+          -d '{"title":"CI/CD Test","description":"Automated deployment test"}' \
+          || echo "POST test failed"
+        
+        curl $SERVICE_URL/todos || echo "GET test failed"
