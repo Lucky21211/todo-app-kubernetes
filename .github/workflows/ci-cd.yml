@@ -136,7 +136,7 @@ jobs:
           
           # Покажем ключевые поля
           case $KIND in
-            "Deployment"))
+            "Deployment")
               REPLICAS=$(grep -A2 "replicas:" "$file" | grep -o "[0-9]\+" | head -1 || echo "?")
               echo "  Replicas: $REPLICAS"
               ;;
